@@ -4,65 +4,128 @@ var mongoose = require('mongoose')
 	, winston = require('winston')
 	, bugsnag = require('bugsnag')
 
+function active_group_queue_worker (task, callback) {
+	var socket = task.socket;
+	var data = task.data;
+
+	var query = {
+		cleared: false
+	}
+
+	if (data._id) {
+		query._id = mongoose.Types.ObjectId(data._id);
+	} else {
+		query.table = mongoose.Types.ObjectId(data.table);
+	}
+
+	models.OrderGroup
+	.find(query)
+	.lean()
+	.populate({
+		path: 'orders',
+		options: {
+			lean: true
+		}
+	})
+	.exec(function(err, orders) {
+		if (err) {
+			callback(err);
+			return;
+		}
+
+		var finish = function (_orders) {
+			for (var i = 0; i < _orders.length; i++) {
+				if (!_orders[i].printouts) continue;
+
+				for (var x = 0; x < _orders[i].printouts.length; x++) {
+					var t = _orders[i].printouts[x].time;
+					_orders[i].printouts[x].time = t.getDate() + "/" + t.getMonth() + "/" + t.getFullYear() + " " + t.getHours() + ":" + t.getMinutes() + ":" + t.getSeconds();
+				}
+			}
+
+			console.log("Got active group");
+			socket.emit('get.group active', _orders);
+			callback();
+		}
+		
+		if (!orders || orders.length == 0) {
+			winston.info("Creating a group for an empty table")
+			order = new models.OrderGroup({
+				table: query.table,
+				cleared: false,
+				orderNumber_generated: Date.now()
+			});
+			
+			getOrderNumber (data, function(err, orderNumber) {
+				if (err) {
+					return callback(err);
+				}
+
+				order.orderNumber = orderNumber + 1;
+				order.save();
+
+				orders.push(order)
+
+				finish(orders);
+			});
+		} else {
+			finish(orders);
+		}
+	})
+}
+
+function getOrderNumber (data, callback) {
+	models.Table.findById(data.table).select('delivery takeaway').lean().exec(function (err, table) {
+		if (err) {
+			return callback(err);
+		}
+
+		console.log(table);
+
+		models.Table.find({
+			delivery: table.delivery,
+			takeaway: table.takeaway,
+			deleted: false
+		}).select('name _id').exec(function(err, tables) {
+			var ids = [];
+			for (var i = 0; i < tables.length; i++) {
+				var table = tables[i];
+
+				ids.push(table._id);
+			}
+
+			console.log(tables);
+
+			models.OrderGroup.findOne({
+				table: {
+					$in: ids
+				}
+			}).select('orderNumber orderNumber_generated').sort('-orderNumber_generated').limit(1).exec(function(err, lastOrder) {
+				if (err) {
+					return callback(err);
+				}
+
+				console.log(lastOrder);
+
+				if (!lastOrder) {
+					return callback(null, 0);
+				}
+
+				callback(null, lastOrder.orderNumber);
+			});
+		});
+	})
+}
+
+var active_group_queue = async.queue(active_group_queue_worker, 1);
+
 exports.router = function (socket) {
 	socket.on('get.group active', function(data) {
 		winston.info("Getting an active group")
-	
-		var query = {
-			cleared: false
-		}
-	
-		if (data._id) {
-			query._id = mongoose.Types.ObjectId(data._id);
-		} else {
-			query.table = mongoose.Types.ObjectId(data.table);
-		}
-
-		models.OrderGroup.findOne({
-		}).select('orderNumber').sort('-orderNumber_generated').limit(1).exec(function(err, lastOrder) {
-			if (err) throw err;
-
-			var orderNumber = lastOrder.orderNumber;
-
-			models.OrderGroup
-			.find(query)
-			.lean()
-			.populate({
-				path: 'orders',
-				options: {
-					lean: true
-				}
-			})
-			.exec(function(err, orders) {
-				if (err) {
-					throw err;
-					return;
-				}
-				
-				if (!orders || orders.length == 0) {
-					winston.info("Creating a group for an empty table")
-					order = new models.OrderGroup({
-						table: query.table,
-						cleared: false,
-						orderNumber: orderNumber + 1,
-						orderNumber_generated: Date.now()
-					});
-					order.save();
-					
-					orders.push(order)
-				}
-
-				for (var i = 0; i < orders.length; i++) {
-					if (!orders[i].printouts) continue;
-
-					for (var x = 0; x < orders[i].printouts.length; x++) {
-						var t = orders[i].printouts[x].time;
-						orders[i].printouts[x].time = t.getDate() + "/" + t.getMonth() + "/" + t.getFullYear() + " " + t.getHours() + ":" + t.getMinutes() + ":" + t.getSeconds();
-					}
-				}
-
-				socket.emit('get.group active', orders);
-			})
+		
+		active_group_queue.push({
+			data: data,
+			socket: socket
 		})
 	});
 	
