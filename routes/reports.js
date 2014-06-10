@@ -81,24 +81,43 @@ exports.router = function (socket) {
 		from = new Date(data.from * 1000);
 		to = new Date(data.to * 1000);
 
-		models.OrderGroup.find({
-			cleared: true,
-			clearedAt: {
-				$gte: from,
-				$lt: to
+		async.parallel({
+			justeat: function(done) {
+				models.CashingUp.find({
+					created: {
+						$gte: from,
+						$lt: to
+					},
+					isJustEat: true
+				})
+				.lean()
+				.select('isJustEat justEatUnpaid created')
+				.exec(done);
+			},
+			sales: function(done) {
+				models.OrderGroup.find({
+					cleared: true,
+					clearedAt: {
+						$gte: from,
+						$lt: to
+					}
+				})
+				.lean()
+				.select('table created cleared clearedAt orderNumber discountTotal orderTotal')
+				.populate({
+					path: 'table',
+					select: 'delivery takeaway',
+					options: {
+						lean: true
+					}
+				})
+				.exec(done);
 			}
-		})
-		.lean()
-		.select('table created cleared clearedAt orderNumber discountTotal orderTotal')
-		.populate({
-			path: 'table',
-			select: 'delivery takeaway',
-			options: {
-				lean: true
-			}
-		})
-		.exec(function(err, orderGroups) {
+		}, function (err, results) {
 			if (err) throw err;
+
+			var orderGroups = results.sales;
+			var cashups = results.justeat;
 
 			var totals = {
 				lunchtime: {
@@ -106,6 +125,7 @@ exports.router = function (socket) {
 					takeaway: 0,
 					other: 0,
 					discount: 0,
+					justEat: 0,
 					total: 0
 				},
 				evening: {
@@ -113,6 +133,7 @@ exports.router = function (socket) {
 					takeaway: 0,
 					other: 0,
 					discount: 0,
+					justEat: 0,
 					total: 0
 				},
 				total: {
@@ -120,6 +141,7 @@ exports.router = function (socket) {
 					takeaway: 0,
 					other: 0,
 					discount: 0,
+					justEat: 0,
 					total: 0
 				}
 			};
@@ -160,6 +182,26 @@ exports.router = function (socket) {
 				totals.total.total += t;
 			}
 
+			for (var i = 0; i < cashups.length; i++) {
+				var c = cashups[i];
+
+				var total = null;
+				if (c.created.getHours() > 17 || (c.created.getHours() == 17 && c.created.getMinutes() > 30)) {
+					// Evening
+					total = totals.evening;
+				} else {
+					// Lunchtime
+					total = totals.lunchtime;
+				}
+
+				if (!c.justEatUnpaid) continue;
+				
+				total.justEat += c.justEatUnpaid;
+				totals.total.justEat += c.justEatUnpaid;
+				total.total += c.justEatUnpaid;
+				totals.total.total += c.justEatUnpaid;
+			}
+			console.log(totals);
 			socket.emit('get.reports', {
 				type: 'salesData',
 				totals: totals

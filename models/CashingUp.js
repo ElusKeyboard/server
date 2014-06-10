@@ -31,6 +31,10 @@ var scheme = schema({
 		type: Number,
 		default: 0
 	},
+	justEatUnpaid: {
+		type: Number,
+		default: 0
+	},
 	isJustEat: {
 		type: Boolean,
 		default: false
@@ -46,6 +50,7 @@ scheme.methods.update = function (data) {
 	this.labour = data.labour;
 	this.tips = data.tips;
 	this.justEat = data.justEat;
+	this.justEatUnpaid = data.justEatUnpaid;
 	this.isJustEat = data.isJustEat;
 
 	if (!this.voucher) this.voucher = 0;
@@ -55,6 +60,7 @@ scheme.methods.update = function (data) {
 	if (!this.labour) this.labour = 0;
 	if (!this.tips) this.tips = 0;
 	if (!this.justEat) this.justEat = 0;
+	if (!this.justEatUnpaid) this.justEatUnpaid = 0;
 	if (!this.isJustEat) this.isJustEat = false;
 	
 	if (data.created) {
