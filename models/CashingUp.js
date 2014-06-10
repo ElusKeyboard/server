@@ -27,6 +27,14 @@ var scheme = schema({
 		type: Number,
 		default: 0
 	},
+	justEat: {
+		type: Number,
+		default: 0
+	},
+	isJustEat: {
+		type: Boolean,
+		default: false
+	},
 	created: { type: Date, default: Date.now }
 });
 
@@ -37,6 +45,8 @@ scheme.methods.update = function (data) {
 	this.pettyCash = data.pettyCash;
 	this.labour = data.labour;
 	this.tips = data.tips;
+	this.justEat = data.justEat;
+	this.isJustEat = data.isJustEat;
 
 	if (!this.voucher) this.voucher = 0;
 	if (!this.cash) this.cash = 0;
@@ -44,6 +54,8 @@ scheme.methods.update = function (data) {
 	if (!this.pettyCash) this.pettyCash = 0;
 	if (!this.labour) this.labour = 0;
 	if (!this.tips) this.tips = 0;
+	if (!this.justEat) this.justEat = 0;
+	if (!this.isJustEat) this.isJustEat = false;
 	
 	if (data.created) {
 		this.created = new Date(data.created * 1000);

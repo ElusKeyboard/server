@@ -29,7 +29,8 @@ exports.router = function (socket) {
 				card: 0,
 				pettyCash: 0,
 				labour: 0,
-				tips: 0
+				tips: 0,
+				justEat: 0
 			};
 
 			for (var i = 0; i < cashups.length; i++) {
@@ -41,12 +42,14 @@ exports.router = function (socket) {
 				aggregate.pettyCash += c.pettyCash;
 				aggregate.labour += c.labour;
 				aggregate.tips += c.tips;
+				aggregate.justEat += c.justEat;
 
 				c.total = c.cash
 						 + c.card
 						 + c.pettyCash
 						 + c.labour
-						 + c.voucher;
+						 + c.voucher
+						 + c.justEat;
 				c.created = new Date(c.created).getTime() / 1000;
 			}
 
@@ -54,7 +57,8 @@ exports.router = function (socket) {
 								 + aggregate.card
 								 + aggregate.pettyCash
 								 + aggregate.labour
-								 + aggregate.voucher;
+								 + aggregate.voucher
+								 + aggregate.justEat;
 
 			socket.emit('get.reports', {
 				type: 'cashingUp',
