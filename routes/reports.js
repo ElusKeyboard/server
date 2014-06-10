@@ -200,14 +200,14 @@ exports.router = function (socket) {
 				if (c.justEatDelivery) {
 					delivery = c.justEatDelivery;
 				}
-				
+
 				var t = c.justEatUnpaid - delivery;
 				total.justEat += t;
 				totals.total.justEat += t;
 				total.total += t;
 				totals.total.total += t;
 			}
-			console.log(totals);
+			
 			socket.emit('get.reports', {
 				type: 'salesData',
 				totals: totals
